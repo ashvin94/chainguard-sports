@@ -6,9 +6,9 @@ dotenv.config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-export async function analyzeWithGemini(filePath, mimeType, mode = "detect") {
+export async function analyzeWithGemini(filePath, mimeType, mode = "detect", retries = 2) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
     const fileData = fs.readFileSync(filePath);
     const base64Data = fileData.toString("base64");
     const prompt = mode === "register" ? getRegisterPrompt() : getDetectPrompt();
@@ -20,14 +20,21 @@ export async function analyzeWithGemini(filePath, mimeType, mode = "detect") {
 
     return parseGeminiResponse(result.response.text());
   } catch (error) {
+    if (error.message.includes("503") && retries > 0) {
+      console.warn(`Gemini 503 High Demand Error. Retrying... (${retries} retries left)`);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      return analyzeWithGemini(filePath, mimeType, mode, retries - 1);
+    }
+    console.error("Gemini API Error:", error);
     return {
       verdict: "UNKNOWN",
       authenticityScore: 50,
-      description: "AI analysis unavailable",
+      description: "AI analysis unavailable: " + (error.message.includes("503") ? "High demand. Please try again later." : error.message),
       error: error.message,
     };
   }
 }
+
 
 // ============================================================
 // Analyze Text Content with Gemini (for documents)
@@ -35,9 +42,9 @@ export async function analyzeWithGemini(filePath, mimeType, mode = "detect") {
 // Sends extracted text to Gemini instead of binary file data.
 // Used for PDFs and text documents where text has been extracted.
 // ============================================================
-export async function analyzeTextWithGemini(textContent, mode = "register") {
+export async function analyzeTextWithGemini(textContent, mode = "register", retries = 2) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
     const prompt = mode === "register"
       ? `Analyze this sports-related document text for registration. Is it original content?\n\nText:\n${textContent}\n\nRespond ONLY valid JSON with keys: verdict, authenticityScore, description, sport, contentType, detectedElements, manipulationSigns, registrationRecommended.`
@@ -47,21 +54,35 @@ export async function analyzeTextWithGemini(textContent, mode = "register") {
 
     return parseGeminiResponse(result.response.text());
   } catch (error) {
+    if (error.message.includes("503") && retries > 0) {
+      console.warn(`Gemini Text 503 High Demand Error. Retrying... (${retries} retries left)`);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      return analyzeTextWithGemini(textContent, mode, retries - 1);
+    }
     return {
       verdict: "UNKNOWN",
       authenticityScore: 50,
-      description: "AI text analysis unavailable",
+      description: "AI text analysis unavailable: " + (error.message.includes("503") ? "High demand." : error.message),
       error: error.message,
     };
   }
 }
 
+
 function getRegisterPrompt() {
-  return `Analyze this sports media content and respond ONLY valid JSON with keys: verdict, authenticityScore, description, sport, contentType, detectedElements, manipulationSigns, registrationRecommended.`;
+  return `Analyze this sports media content for registration. 
+  1. Determine if it's original sports footage/imagery.
+  2. Check for any signs of AI manipulation, photoshopping, or editing.
+  3. Identify the sport, players, and context.
+  Respond ONLY valid JSON with keys: verdict (AUTHENTIC, MANIPULATED, or SUSPICIOUS), authenticityScore (0-100), description, sport, contentType, detectedElements (array), manipulationClues (array of specific signs), registrationRecommended (boolean).`;
 }
 
 function getDetectPrompt() {
-  return `Analyze this sports media content for authenticity/manipulation and respond ONLY valid JSON with keys: verdict, authenticityScore, description, manipulationSigns, deepfakeIndicators, suspiciousElements, recommendation.`;
+  return `Analyze this sports media content for piracy, deepfakes, or manipulation. 
+  1. Does it show signs of being edited (color grading, overlays, face swaps, cuts)?
+  2. Is it a duplicate of known sports events?
+  3. Provide a list of specific clues for your verdict.
+  Respond ONLY valid JSON with keys: verdict (AUTHENTIC, MANIPULATED, or SUSPICIOUS), authenticityScore (0-100), description, manipulationClues (array), deepfakeIndicators (array), suspiciousElements (array), recommendation.`;
 }
 
 function parseGeminiResponse(text) {
@@ -76,7 +97,7 @@ function parseGeminiResponse(text) {
       verdict: parsed.verdict || "UNKNOWN",
       authenticityScore: parsed.authenticityScore || 50,
       description: parsed.description || "No description",
-      manipulationSigns: parsed.manipulationSigns || [],
+      manipulationClues: parsed.manipulationClues || parsed.manipulationSigns || [],
       deepfakeIndicators: parsed.deepfakeIndicators || [],
       sport: parsed.sport || "unknown",
       contentType: parsed.contentType || "unknown",

@@ -118,8 +118,10 @@ app.post("/register", upload.single("file"), async (req, res) => {
     const assetData = {
       fileName: originalname, category, mimeType: mimetype, fileSize: size,
       sha256, similarityHash: similarityHash || null, documentFingerprint: documentData?.fingerprint || null,
-      geminiAnalysis: geminiResult, owner: req.body.authorName || req.body.walletAddress || "0x9c824C93fB406Ba66FCab00d2CC80Bb7a2A42965",
+      geminiAnalysis: geminiResult,
+      owner: req.body.walletAddress || req.body.authorName || "anonymous",
       nftTxHash: nftResult.success ? nftResult.txHash : null,
+      ipfsUri: contentCID,
       timestamp: new Date().toISOString(), status: "registered",
     };
 
@@ -146,11 +148,11 @@ app.post("/detect", upload.single("file"), async (req, res) => {
     const category = getFileCategory(mimetype);
     console.log(`\n🔍 Detecting: ${originalname} (${category})`);
 
+    let exactCopyResult = null;
     const sha256 = generateSHA256(filePath);
     const exactMatch = await checkSHAExists(sha256);
     if (exactMatch) {
-      deleteTempFile(filePath);
-      return res.json({ status: "EXACT_COPY", verdict: "🚨 Exact Copy Detected!", similarity: 100, category, originalOwner: exactMatch.owner, registeredAt: exactMatch.timestamp, method: "SHA256" });
+      exactCopyResult = { status: "EXACT_COPY", verdict: "🚨 Exact Copy Detected!", similarity: 100, category, originalOwner: exactMatch.owner, registeredAt: exactMatch.timestamp, method: "SHA256" };
     }
 
     let similarityResult = null;
@@ -198,14 +200,23 @@ app.post("/detect", upload.single("file"), async (req, res) => {
       ? await analyzeTextWithGemini(documentData.textPreview)
       : await analyzeWithGemini(filePath, mimetype, "detect");
 
-    const topSimilarity = similarityResult?.similarity || 0;
+    const topSimilarity = exactCopyResult ? 100 : (similarityResult?.similarity || 0);
     let finalStatus = "AUTHENTIC";
     let finalMessage = "✅ Content appears original";
 
-    if (geminiResult.verdict === "MANIPULATED") { finalStatus = "MANIPULATED"; finalMessage = "🎭 AI manipulation detected!"; }
-    else if (topSimilarity >= 99) { finalStatus = "EXACT_COPY"; finalMessage = "🚨 Exact copy!"; }
-    else if (topSimilarity >= 90) { finalStatus = "PIRACY"; finalMessage = "🚨 Highly similar — likely pirated!"; }
-    else if (topSimilarity >= 75) { finalStatus = "SUSPICIOUS"; finalMessage = "⚠️ Suspicious similarity found"; }
+    if (exactCopyResult) {
+      finalStatus = "EXACT_COPY";
+      finalMessage = "🚨 Exact copy!";
+    } else if (geminiResult.verdict === "MANIPULATED") { 
+      finalStatus = "MANIPULATED"; 
+      finalMessage = "🎭 AI manipulation detected!"; 
+    } else if (topSimilarity >= 90) { 
+      finalStatus = "PIRACY"; 
+      finalMessage = "🚨 Highly similar — likely pirated!"; 
+    } else if (topSimilarity >= 75) { 
+      finalStatus = "SUSPICIOUS"; 
+      finalMessage = "⚠️ Suspicious similarity found"; 
+    }
 
     if (finalStatus !== "AUTHENTIC") await saveAlert({ fileName: originalname, category, status: finalStatus, similarity: topSimilarity, timestamp: new Date().toISOString() });
 
@@ -213,7 +224,14 @@ app.post("/detect", upload.single("file"), async (req, res) => {
     if (tempDir && fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
 
     console.log(`✅ Detection: ${finalStatus}\n`);
-    res.json({ status: finalStatus, verdict: finalMessage, category, similarity: topSimilarity, geminiAnalysis: geminiResult, similarContent: similarityResult && topSimilarity > 50 ? { owner: similarityResult.owner, fileName: similarityResult.fileName, registeredAt: similarityResult.timestamp, similarity: topSimilarity } : null });
+    res.json({ 
+      status: finalStatus, 
+      verdict: finalMessage, 
+      category, 
+      similarity: topSimilarity, 
+      geminiAnalysis: geminiResult, 
+      similarContent: exactCopyResult ? { owner: exactCopyResult.originalOwner, fileName: "N/A", registeredAt: exactCopyResult.registeredAt, similarity: 100 } : (similarityResult && topSimilarity > 50 ? { owner: similarityResult.owner, fileName: similarityResult.fileName, registeredAt: similarityResult.timestamp, similarity: topSimilarity } : null) 
+    });
 
   } catch (error) {
     deleteTempFile(filePath);

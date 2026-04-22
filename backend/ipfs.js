@@ -1,22 +1,45 @@
+import pinataSDK from "@pinata/sdk";
 import fs from "fs";
-import * as Hash from "ipfs-only-hash";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+// Initialize Pinata with your keys from .env
+const pinata = new pinataSDK(
+  process.env.PINATA_API_KEY,
+  process.env.PINATA_SECRET_API_KEY
+);
 
 /**
- * Calculates the IPFS CID locally WITHOUT uploading the file to the public network.
- * @param {string} filePath - The path to the file to be processed.
- * @returns {Promise<string>} The IPFS CID hash (e.g., ipfs://Qm...)
+ * Uploads a file to IPFS using Pinata.
+ * @param {string} filePath - The path to the file to be uploaded.
+ * @returns {Promise<string>} The IPFS CID URI (ipfs://...)
  */
 export async function uploadToIPFS(filePath) {
   try {
-    const data = fs.readFileSync(filePath);
+    console.log(`☁️ Uploading ${filePath} to Pinata IPFS...`);
+
+    const readableStreamForFile = fs.createReadStream(filePath);
+    const options = {
+      pinataMetadata: {
+        name: `ChainGuard_${Date.now()}`,
+      },
+      pinataOptions: {
+        cidVersion: 0,
+      },
+    };
+
+    const result = await pinata.pinFileToIPFS(readableStreamForFile, options);
     
-    // Calculates the exact v0 CID that IPFS would generate
-    const hash = await Hash.of(data);
+    const ipfsUri = `ipfs://${result.IpfsHash}`;
+    console.log(`✅ Pinata Upload successful! CID: ${ipfsUri}`);
     
-    console.log(`🔒 Local IPFS CID generated successfully: ${hash}`);
-    return `ipfs://${hash}`;
+    return ipfsUri;
   } catch (error) {
-    console.error("❌ Error generating local IPFS CID:", error.message);
-    return "ipfs_pending";
+    console.error("❌ Pinata upload error:", error.message);
+    
+    // Fallback: If Pinata fails, we return a "pending" status 
+    // so the rest of the registration (Blockchain/AI) can still proceed
+    return "ipfs_failed";
   }
 }

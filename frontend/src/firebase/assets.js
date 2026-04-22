@@ -1,4 +1,4 @@
-import { addDoc, collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import { collection, getDocs, query } from "firebase/firestore";
 import { db } from "./config";
 
 async function computeFileHash(file) {
@@ -48,41 +48,88 @@ export async function buildAssetFingerprints(file) {
   return { hash, pHash };
 }
 
-export async function uploadAndCreateNftRecord(file, user) {
-  const { hash, pHash } = await buildAssetFingerprints(file);
-
-  const docRef = await addDoc(collection(db, "nfts"), {
-    ownerUid: user.uid,
-    ownerEmail: user.email || "unknown",
-    title: file.name,
-    fileName: file.name,
-    fileType: file.type || "unknown",
-    fileSize: file.size,
-    hash,
-    pHash,
-    tokenId: `NFT-${Math.floor(Date.now() / 1000)}`,
-    imageUrl: null,
-    fileUrl: null,
-    status: "minted",
-    createdAt: Date.now(),
+// Sort helper
+function sortByDate(docs) {
+  if (!docs) return [];
+  return docs.sort((a, b) => {
+    let ta = 0;
+    let tb = 0;
+    
+    if (a.timestamp) ta = new Date(a.timestamp).getTime();
+    else if (a.createdAt) ta = typeof a.createdAt === 'number' ? a.createdAt : new Date(a.createdAt).getTime();
+    
+    if (b.timestamp) tb = new Date(b.timestamp).getTime();
+    else if (b.createdAt) tb = typeof b.createdAt === 'number' ? b.createdAt : new Date(b.createdAt).getTime();
+    
+    // Fallback if Date is invalid (NaN)
+    if (isNaN(ta)) ta = 0;
+    if (isNaN(tb)) tb = 0;
+    
+    return tb - ta;
   });
-
-  return { id: docRef.id, hash, pHash };
 }
 
-export async function getMyNfts(ownerUid) {
-  const q = query(
-    collection(db, "nfts"),
-    where("ownerUid", "==", ownerUid),
-    orderBy("createdAt", "desc")
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+// Global debug helper
+if (typeof window !== 'undefined') {
+  window.debugAssets = async () => {
+    try {
+      const a = await getDocs(collection(db, "assets"));
+      const n = await getDocs(collection(db, "nfts"));
+      console.log("Raw 'assets':", a.docs.map(d => d.data()));
+      console.log("Raw 'nfts':", n.docs.map(d => d.data()));
+      return { assets: a.size, nfts: n.size };
+    } catch (e) { console.error(e); }
+  };
+}
+
+// Fetch all assets and filter client-side — avoids Firestore composite index requirement
+export async function getMyNfts(ownerIdentifier) {
+  try {
+    const id = ownerIdentifier?.toLowerCase();
+    console.log("Fetching NFTs for:", id);
+    
+    // Check both collections for backward compatibility
+    const [assetsSnap, nftsSnap] = await Promise.all([
+      getDocs(query(collection(db, "assets"))),
+      getDocs(query(collection(db, "nfts")))
+    ]);
+
+    const all = [
+      ...assetsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+      ...nftsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    ];
+    
+    console.log("Total assets found across collections:", all.length);
+
+    const mine = all.filter((a) => {
+      const owner = (a.owner || a.ownerEmail || a.ownerUid)?.toLowerCase();
+      return owner === id;
+    });
+
+    console.log("Found matching assets for", id, ":", mine.length);
+    return sortByDate(mine);
+  } catch (err) {
+    console.error("getMyNfts error:", err);
+    return [];
+  }
 }
 
 export async function getAllNfts() {
-  const q = query(collection(db, "nfts"), orderBy("createdAt", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-}
+  try {
+    const [assetsSnap, nftsSnap] = await Promise.all([
+      getDocs(query(collection(db, "assets"))),
+      getDocs(query(collection(db, "nfts")))
+    ]);
 
+    const all = [
+      ...assetsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+      ...nftsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    ];
+    
+    console.log("getAllNfts total found:", all.length);
+    return sortByDate(all);
+  } catch (err) {
+    console.error("getAllNfts error:", err);
+    return [];
+  }
+}

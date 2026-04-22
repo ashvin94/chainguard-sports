@@ -1,55 +1,70 @@
-import React, { useEffect, useState } from "react";
-import { ethers } from "ethers";
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../contractABI";
+import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
+import Spinner from "../components/Spinner";
+import { useAuth } from "../context/AuthContext";
+import { getMyNfts } from "../firebase/assets";
 
-// Read directly from blockchain via public RPC — no MetaMask needed
-const provider = new ethers.JsonRpcProvider("https://polygon-amoy.drpc.org");
-const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-
-export default function MyNFTsPage() {
+function MyNFTsPage() {
   const [nfts, setNfts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
   useEffect(() => {
-    loadAllNFTs();
-  }, []);
-
-  async function loadAllNFTs() {
-    setLoading(true);
-    try {
-      const total = await contract.getTotalNFTs();
-      const count = Number(total);
-      const list = [];
-      for (let i = 1; i <= count; i++) {
-        const nft = await contract.getNFT(i);
-        list.push({
-          tokenId: nft.tokenId.toString(),
-          owner: nft.owner,
-          fileName: nft.fileName,
-          fileType: nft.fileType,
-          description: nft.description,
-          contentCID: nft.contentCID,
-          timestamp: new Date(Number(nft.timestamp) * 1000).toLocaleString(),
-        });
+    const loadNfts = async () => {
+      try {
+        setLoading(true);
+        const records = await getMyNfts(user.uid);
+        setNfts(records);
+      } catch (error) {
+        toast.error(error.message || "Could not load NFTs");
+      } finally {
+        setLoading(false);
       }
-      setNfts(list);
-    } catch (error) {
-      console.error("Failed to load NFTs:", error);
-    }
-    setLoading(false);
-  }
+    };
+
+    loadNfts();
+  }, [user.uid]);
+
+  if (loading) return <Spinner label="Loading your NFTs..." />;
 
   return (
-    <div className="page">
-      <h2>All Registered NFTs</h2>
-      <button className="action-btn" onClick={loadAllNFTs} disabled={loading}>
-        {loading ? "Loading..." : "🔄 Refresh NFTs"}
-      </button>
+    <section className="space-y-6">
+      <div>
+        <h2 className="text-3xl font-semibold">My NFTs</h2>
+        <p className="mt-2 text-slate-300">Your protected assets and on-chain proofs.</p>
+      </div>
+
       {nfts.length === 0 ? (
-        <p>No NFTs found.</p>
-      ) : (
-        <pre>{JSON.stringify(nfts, null, 2)}</pre>
-      )}
-    </div>
+        <div className="glass-card rounded-2xl p-6 text-slate-300">
+          No NFT records found yet. Upload an asset to create your first one.
+        </div>
+      ) : null}
+
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {nfts.map((nft) => (
+          <article key={nft.id} className="glass-card overflow-hidden rounded-2xl">
+            <img
+              src={
+                nft.imageUrl ||
+                "https://images.unsplash.com/photo-1618005198919-d3d4b5a92eee?auto=format&fit=crop&w=800&q=80"
+              }
+              alt={nft.title}
+              className="h-40 w-full object-cover"
+            />
+            <div className="space-y-2 p-4">
+              <h3 className="text-lg font-semibold">{nft.title}</h3>
+              <p className="text-xs text-slate-300">Hash: {nft.hash?.slice(0, 20)}...</p>
+              <p className="text-xs text-slate-300">
+                pHash: {nft.pHash ? `${nft.pHash.slice(0, 20)}...` : "N/A"}
+              </p>
+              <p className="text-xs text-slate-300">Owner: {nft.ownerEmail}</p>
+              <p className="text-xs text-slate-400">Token: {nft.tokenId}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
+
+export default MyNFTsPage;

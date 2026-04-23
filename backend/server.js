@@ -71,6 +71,10 @@ function getFileCategory(mimeType) {
   return "unknown";
 }
 
+app.get("/", (req, res) => {
+  res.send("🚀 SportShield AI Backend is running and secure!");
+});
+
 app.get("/test", (req, res) => {
   res.json({
     message: "✅ SportShield AI Server is running!",

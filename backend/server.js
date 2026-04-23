@@ -25,7 +25,26 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(cors({ origin: ["http://localhost:5173", "http://localhost:3000"] })); // Update with Netlify URL later
+
+// allow CORS for local dev and your specific Netlify production URL
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "https://sportshield.netlify.app"
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith(".netlify.app")) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  }
+}));
+
 app.use(express.json());
 
 const apiLimiter = rateLimit({

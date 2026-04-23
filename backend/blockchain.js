@@ -14,7 +14,7 @@ function getSigner() {
     if (!process.env.DEPLOYER_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY === "your_metamask_private_key") {
       throw new Error("DEPLOYER_PRIVATE_KEY not set in .env — add your MetaMask private key");
     }
-    provider = new ethers.JsonRpcProvider("https://polygon-amoy.drpc.org");
+    provider = new ethers.JsonRpcProvider("https://rpc-amoy.polygon.technology");
     signer = new ethers.Wallet(process.env.DEPLOYER_PRIVATE_KEY, provider);
   }
   return signer;

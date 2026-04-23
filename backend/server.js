@@ -50,7 +50,7 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = [
-      "image/jpeg","image/png","image/gif","image/webp",
+      "image/jpeg","image/png","image/gif","image/webp","image/avif",
       "video/mp4","video/mpeg","video/quicktime","video/webm",
       "audio/mpeg","audio/wav","audio/ogg","audio/mp4","audio/aac",
       "application/pdf","text/plain",
@@ -124,12 +124,21 @@ app.post("/register", apiLimiter, upload.single("file"), async (req, res) => {
 
     const nftResult = await mintNFTFromBackend(ownerAddress, sha256, contentCID, originalname, category, geminiResult.description || `${category} content`);
 
+    if (!nftResult.success) {
+      deleteTempFile(filePath);
+      if (tempDir && fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      return res.status(500).json({ 
+        error: "Blockchain minting failed. Registration aborted to maintain data integrity.", 
+        details: nftResult.error 
+      });
+    }
+
     const assetData = {
       fileName: originalname, category, mimeType: mimetype, fileSize: size,
       sha256, similarityHash: similarityHash || null, documentFingerprint: documentData?.fingerprint || null,
       geminiAnalysis: geminiResult,
       owner: ownerAddress,
-      nftTxHash: nftResult.success ? nftResult.txHash : null,
+      nftTxHash: nftResult.txHash,
       ipfsUri: contentCID,
       timestamp: new Date().toISOString(), status: "registered",
     };
@@ -139,7 +148,7 @@ app.post("/register", apiLimiter, upload.single("file"), async (req, res) => {
     if (tempDir && fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
 
     console.log(`✅ Registration complete!\n`);
-    res.json({ status: "SUCCESS", message: "✅ Content registered!", docId, sha256, category, geminiAnalysis: geminiResult, nft: nftResult.success ? { txHash: nftResult.txHash } : { error: nftResult.error } });
+    res.json({ status: "SUCCESS", message: "✅ Content registered!", docId, sha256, category, geminiAnalysis: geminiResult, nft: { txHash: nftResult.txHash } });
 
   } catch (error) {
     deleteTempFile(filePath);
@@ -258,3 +267,16 @@ app.listen(PORT, () => {
   console.log(`⛓️  Blockchain: ${process.env.DEPLOYER_PRIVATE_KEY ? "✅" : "❌"}`);
   console.log(`📁 Supports: Image ✅ Video ✅ Audio ✅ Document ✅\n`);
 });
+
+// PREVENT RENDER SLEEP: Self-ping every 14 minutes
+const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
+if (RENDER_URL) {
+  setInterval(async () => {
+    try {
+      await fetch(`${RENDER_URL}/test`);
+      console.log("⚓ Keep-alive ping sent to:", RENDER_URL);
+    } catch (e) {
+      console.error("⚓ Keep-alive failed:", e.message);
+    }
+  }, 14 * 60 * 1000); // 14 mins
+}

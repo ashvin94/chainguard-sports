@@ -10,7 +10,7 @@ const categoryEmoji = { image: "🖼️", video: "🎬", audio: "🎵", document
 
 function NFTCard({ nft, index }) {
   const ipfsGateway = nft.ipfsUri
-    ? nft.ipfsUri.replace("ipfs://", "https://gateway.pinata.cloud/ipfs/")
+    ? nft.ipfsUri.replace("ipfs://", "https://ipfs.io/ipfs/")
     : null;
 
   const isImage = nft.category === "image" || nft.mimeType?.startsWith("image/");

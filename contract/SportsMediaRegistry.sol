@@ -31,7 +31,6 @@ contract SportsMediaRegistry {
     }
 
     function mintNFT(
-        address _owner,
         string memory _sha256Hash,
         string memory _contentCID,
         string memory _fileName,
@@ -45,7 +44,7 @@ contract SportsMediaRegistry {
 
         nfts[newTokenId] = MediaNFT({
             tokenId: newTokenId,
-            owner: _owner,
+            owner: msg.sender,
             sha256Hash: _sha256Hash,
             contentCID: _contentCID,
             fileName: _fileName,
@@ -56,8 +55,8 @@ contract SportsMediaRegistry {
         });
 
         hashToTokenId[_sha256Hash] = newTokenId;
-        ownerTokens[_owner].push(newTokenId);
-        emit NFTMinted(newTokenId, _owner, _sha256Hash, _contentCID);
+        ownerTokens[msg.sender].push(newTokenId);
+        emit NFTMinted(newTokenId, msg.sender, _sha256Hash, _contentCID);
         return newTokenId;
     }
 

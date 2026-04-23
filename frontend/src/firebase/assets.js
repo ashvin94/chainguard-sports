@@ -69,18 +69,7 @@ function sortByDate(docs) {
   });
 }
 
-// Global debug helper
-if (typeof window !== 'undefined') {
-  window.debugAssets = async () => {
-    try {
-      const a = await getDocs(collection(db, "assets"));
-      const n = await getDocs(collection(db, "nfts"));
-      console.log("Raw 'assets':", a.docs.map(d => d.data()));
-      console.log("Raw 'nfts':", n.docs.map(d => d.data()));
-      return { assets: a.size, nfts: n.size };
-    } catch (e) { console.error(e); }
-  };
-}
+
 
 // Fetch all assets and filter client-side — avoids Firestore composite index requirement
 export async function getMyNfts(ownerIdentifier) {

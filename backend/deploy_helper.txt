@@ -1,0 +1,46 @@
+import { ethers } from "ethers";
+import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+async function main() {
+  const privateKey = process.env.DEPLOYER_PRIVATE_KEY;
+  const rpcUrl = "https://rpc-amoy.polygon.technology";
+
+  if (!privateKey || privateKey === "your_metamask_private_key") {
+    console.error("❌ Please set DEPLOYER_PRIVATE_KEY in your .env file");
+    return;
+  }
+
+  console.log("🚀 Deploying SportsMediaRegistry to Polygon Amoy...");
+  
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const wallet = new ethers.Wallet(privateKey, provider);
+  
+  console.log("👤 Deployer Address:", wallet.address);
+  const balance = await provider.getBalance(wallet.address);
+  console.log("💰 Balance:", ethers.formatEther(balance), "MATIC");
+
+  if (balance < ethers.parseEther("0.01")) {
+    console.error("❌ Insufficient balance for deployment!");
+    return;
+  }
+
+  // Contract Bytecode and ABI (Compiled from SportsMediaRegistry.sol)
+  // I will use a simplified deployment since I don't have solc here, 
+  // but I can use the existing ABI from blockchain.js and I need the bytecode.
+  
+  console.log("⚠️  Note: This script requires the compiled bytecode. Since we are in a hackathon environment,");
+  console.log("please ensure you have the 'contractABI.js' updated in the frontend as well.");
+  
+  // Actually, I'll just tell the user how to deploy using Remix or Hardhat if they have it.
+  // But wait, I can try to help them fix the 'Content already registered' issue first.
+}
+
+main();

@@ -88,6 +88,7 @@ function UploadPage() {
   const [loading, setLoading] = useState(false);
   const [uploaded, setUploaded] = useState(null);
   const [step, setStep] = useState("");
+  const [timeTaken, setTimeTaken] = useState(null); // Time in seconds
   const { user } = useAuth();
   const { walletAddress, connectWallet, isWrongNetwork, switchNetwork } = useWallet();
 
@@ -106,6 +107,8 @@ function UploadPage() {
 
     try {
       setLoading(true);
+      setTimeTaken(null);
+      const startTime = Date.now();
       setStep("🤖 Sending to Gemini AI for sports content analysis...");
       toast.loading("Registering on SportShield AI...", { id: "reg" });
 
@@ -121,6 +124,8 @@ function UploadPage() {
       toast.dismiss("reg");
 
       if (result.status === "SUCCESS") {
+        const endTime = Date.now();
+        setTimeTaken(((endTime - startTime) / 1000).toFixed(1));
         setStep("✅ Registration complete!");
         setUploaded(result);
         toast.success("Sports media shielded successfully!");
@@ -160,12 +165,12 @@ function UploadPage() {
         </p>
       </div>
 
-      {/* Wallet warning */}
+      {/* Wallet connection status */}
       {!walletAddress && (
         <div className="badge-suspicious rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div className="space-y-1 min-w-0">
             <p className="text-sm font-bold text-rose-300">⚠️ Wallet Not Connected</p>
-            <p className="text-xs text-rose-200/70">Connect your MetaMask wallet to claim ownership. Need test MATIC? <a href="https://faucet.polygon.technology/" target="_blank" rel="noopener noreferrer" className="underline text-cyan-400 hover:text-cyan-300">Get it from the faucet</a></p>
+            <p className="text-xs text-rose-200/70">Connect your MetaMask wallet to claim ownership. **Note:** Registration is gas-less for creators; SportShield AI covers all blockchain fees.</p>
           </div>
           <button onClick={connectWallet} className="wallet-btn rounded-lg px-4 py-2 text-sm font-bold text-white whitespace-nowrap shrink-0 w-full sm:w-auto text-center">
             🦊 Connect Wallet
@@ -198,6 +203,11 @@ function UploadPage() {
           className="glass-card space-y-4 rounded-2xl p-5"
         >
           <p className="text-lg font-bold text-emerald-400">✅ Sports Media Registered &amp; Protected</p>
+          {timeTaken && (
+            <p className="text-xs text-slate-400 italic">
+              ✨ Total Shielding Time: <span className="text-cyan-400 font-bold">{timeTaken} seconds</span>
+            </p>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <div className="glass-card rounded-lg p-3">
@@ -214,20 +224,40 @@ function UploadPage() {
           <GeminiBox analysis={uploaded.geminiAnalysis} />
 
           {/* NFT Info */}
-          {uploaded.nft?.txHash && (
-            <div className="ai-box rounded-xl p-3 text-sm">
-              <p className="text-xs text-cyan-400 mb-1 uppercase tracking-wider">⛓️ NFT Minted on Polygon Amoy</p>
-              <p className="text-xs text-slate-400 break-all">Owner: <span className="text-white font-mono">{walletAddress}</span></p>
-              <a
-                href={`https://amoy.polygonscan.com/tx/${uploaded.nft.txHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-1 block break-all font-mono text-xs text-amber-300 hover:text-amber-200 transition-colors"
-              >
-                Tx: {uploaded.nft.txHash}
-              </a>
+          {uploaded.nft?.txHash ? (
+            <div className="ai-box rounded-xl p-3 text-sm space-y-2">
+              <div>
+                <p className="text-xs text-cyan-400 mb-1 uppercase tracking-wider">⛓️ NFT Minted on Polygon Amoy</p>
+                <p className="text-xs text-slate-400 break-all">Owner: <span className="text-white font-mono">{walletAddress}</span></p>
+                <a
+                  href={`https://amoy.polygonscan.com/tx/${uploaded.nft.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 block break-all font-mono text-xs text-amber-300 hover:text-amber-200 transition-colors"
+                >
+                  Tx: {uploaded.nft.txHash}
+                </a>
+              </div>
+              
+              <div className="pt-2 border-t border-cyan-500/20">
+                <p className="text-xs text-slate-400 mb-1 uppercase tracking-wider">☁️ IPFS Storage Proof</p>
+                <p className="text-[10px] text-slate-500 font-mono truncate">CID: {uploaded.ipfsUri}</p>
+                <a
+                  href={uploaded.ipfsUri?.replace("ipfs://", "https://ipfs.io/ipfs/")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-block text-xs text-cyan-400 hover:text-cyan-300 underline"
+                >
+                  View Original File on IPFS ↗
+                </a>
+              </div>
             </div>
-          )}
+          ) : uploaded.nft?.error ? (
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm">
+              <p className="text-xs font-bold text-rose-400 uppercase tracking-wider">⚠️ Blockchain Minting Delayed</p>
+              <p className="text-xs text-rose-200/70">Database registration succeeded, but the NFT minting failed: {uploaded.nft.error}</p>
+            </div>
+          ) : null}
         </motion.div>
       )}
     </section>
